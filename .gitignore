@@ -1,0 +1,9 @@
+﻿.env
+*.db
+*.log
+__pycache__/
+personal/
+情绪.json
+身体.json
+关系.json
+my_states/
