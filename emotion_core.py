@@ -700,12 +700,21 @@ def evaluate_event_with_llm(event_desc, current_mood, character_card, api_key=No
             "理由": "（依赖库缺失，触发零变动兜底）"
         }
 
-    # 初始化客户端
-    if api_key:
-        client = genai.Client(api_key=api_key)
-    else:
-        # 默认从环境变量或环境自动加载
-        client = genai.Client()
+    # 初始化客户端（没有 key 时不崩：降级为零变动，闭环其余部分——衰减/能量/想念/打毛——照常工作）
+    try:
+        if api_key:
+            client = genai.Client(api_key=api_key)
+        else:
+            # 默认从环境变量或环境自动加载
+            client = genai.Client()
+    except Exception as e:
+        print(f"【提示】评估器不可用（{e}），本轮按零变动处理。设置 GEMINI_API_KEY 或注入自己的 evaluator 可启用打分。")
+        return {
+            "变动": {dim: 0.0 for dim in character_card.get("基线", {})},
+            "情绪色": "无",
+            "和弦": current_mood.get("和弦", "Cmaj7"),
+            "理由": "（评估器无可用密钥，零变动兜底）"
+        }
 
     # 构建系统指令，剥离一切丹炉专属人格
     evaluator_instruction = (
