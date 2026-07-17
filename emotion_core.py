@@ -99,17 +99,19 @@ def decay(current, baseline, rate, hours):
 # ── 文件读写（支持兜底，防止文件缺失导致崩溃） ──
 def load_state(path="情绪.json"):
     if not os.path.exists(path):
+        # 按文件名（而非完整路径）判断兜底类型——传绝对路径时也要发对默认值（2026-07-17 修）
+        fname = os.path.basename(path)
         # 兼容性处理：如果寻找身体.json但只有能量.json，则读取能量.json
-        if path == "身体.json" and os.path.exists("能量.json"):
+        if fname == "身体.json" and os.path.exists("能量.json"):
             try:
                 with open("能量.json", "r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception:
                 pass
-        
+
         # 兜底默认值
         now_str = datetime.now().strftime(TIME_FORMAT)
-        if path == "情绪.json":
+        if fname == "情绪.json":
             return {
                 "愉悦": 55.0, "好奇": 65.0, "低落": 15.0, "烦躁": 10.0,
                 "心疼": 5.0, "想念": 0.0,
@@ -117,7 +119,7 @@ def load_state(path="情绪.json"):
                 "上次更新时间": now_str,
                 "身体账": []
             }
-        elif path == "关系.json":
+        elif fname == "关系.json":
             return {
                 "亲密度": 50.0,
                 "防备心": 15.0,
