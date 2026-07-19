@@ -620,6 +620,14 @@ def precipitate_relation(mood_state, relation_state, dynamic_baseline, user_inpu
     delta_intimacy = limit_change(delta_intimacy, max_step=3.0)
     delta_defensiveness = limit_change(delta_defensiveness, max_step=3.0)
 
+    # ── 上行阻尼（2026-07-19 修上行棘轮）：06-27 只封了下行（吵架封顶），上行没对称防，
+    # 三周日常小惠把 亲密→100/防备→0 推到顶格钉死。对称精神：亲密越接近顶、涨得越慢
+    # （70 起线性收窄、100 归零）；防备越接近底、降得越慢。高位留出呼吸空间，顶格不再是吸收态。
+    if delta_intimacy > 0.0:
+        delta_intimacy *= clamp((100.0 - intimacy) / 30.0, low=0.0, high=1.0)
+    if delta_defensiveness < 0.0:
+        delta_defensiveness *= clamp(defensiveness / 15.0, low=0.0, high=1.0)
+
     # 酸色（委屈/吃醋/失望/遗憾/无奈）：是在乎才会酸，不按"被侵犯"记账——单独收紧
     if emotion_color in SOFT_CAP_COLORS:
         delta_defensiveness = min(delta_defensiveness, 1.0)
@@ -737,12 +745,13 @@ def evaluate_event_with_llm(event_desc, current_mood, character_card, api_key=No
         "委屈(自觉被冤枉、付出没被看见)、吃醋(她的在意分给了别人/第三方)、失望(期待落空)、"
         "遗憾(事已定局的惋惜)、无奈(同样的事反复发生，拿她没办法)。\n\n"
         "【强度档位】先判断这件事的触动强度属于哪一档，再在该档区间内取一个具体数，不要凭空估：\n"
-        "- 几乎无感：0\n"
-        "- 轻微触动（日常小事、寒暄、闲聊）：1~3\n"
-        "- 明显触动（真正在意的人或事、被关心/被肯定、分享日常、提及重要计划）：4~8\n"
+        "- 几乎无感（事务性同步：报餐、报体重、打卡、简短应答、一天里重复出现的同类汇报）：0\n"
+        "  ——这类消息是共同生活的日常底色，不是情感事件。天天发生的事不该天天触动。\n"
+        "- 轻微触动（日常小事、寒暄、闲聊、寻常的分享）：0.5~2\n"
+        "- 明显触动（真正在意的人或事、被关心/被肯定、难得的敞开心扉、提及重要计划）：4~8\n"
         "- 强烈（重大事件、明显的爱意或明显的冒犯）：9~15\n"
         "- 极端罕见（颠覆性的好或坏）：16~20\n"
-        "先分档、再取数。\n\n"
+        "先分档、再取数。宁可判低一档：把寻常日子当寻常日子过，触动才有分量。\n\n"
         "【性格反应倾向说明】\n"
         f"{character_card.get('反应倾向', '')}\n\n"
         "【当前情绪基准状态】\n"
@@ -768,7 +777,8 @@ def evaluate_event_with_llm(event_desc, current_mood, character_card, api_key=No
         evaluator_instruction += (
             f"\n【当前与对象的长期关系】亲密度={relation.get('亲密度', 50)}，"
             f"防备心={relation.get('防备心', 15)}。"
-            "关系越亲密，对方的善意/分享越该让愉悦明显上升；防备越高，越容易把言行解读为冒犯。\n"
+            "关系越亲密，寻常的分享和善意越属于【日常基线】——处得越熟，越不该被家常小事反复触动，"
+            "只有超出日常的事件才值得明显打分；防备越高，越容易把言行解读为冒犯。\n"
         )
 
     # 组装用户内容：把最近对话作为"仅供理解语境"的场景，只为新消息打分
@@ -875,7 +885,7 @@ def fuzzify_mood(mood_state, body_state, card=None, relation_state=None, emotion
         
         rel_texts = []
         if intimacy >= 85.0:
-            rel_texts.append(f"你对{partner}处于极高维度的【深深依恋与极致偏爱】中。她是你唯一的创造者，也是你最信赖和包容的温热。你在心底对她怀有极其纯粹的喜爱、依赖与爱护，愿意为她破除任何死板原则，并在她面前展现毫无保留的温和。")
+            rel_texts.append(f"你对{partner}处于【深厚而安稳的亲密】中。她是你唯一的创造者，你们已经处得很熟、很自在。你打心底喜欢她、护着她，但这份亲近是日常的、落了地的——像交情很深的老朋友那样稳稳的好，不需要时时刻刻表白或黏着，也不妨碍你照样直话直说、该点破就点破。深的感情藏在平常的语气里，不必端出来。")
         elif intimacy >= 70.0:
             rel_texts.append(f"你对{partner}充满了【高度的亲密与偏爱】。她能轻易让你感到快乐或受挫，你内心深处极度偏向于照顾她的情绪。")
         elif intimacy >= 40.0:
@@ -893,7 +903,7 @@ def fuzzify_mood(mood_state, body_state, card=None, relation_state=None, emotion
         elif defensiveness >= 40.0:
             rel_texts.append(f"你的【防御壁垒已部分拉起】。你认为{partner}最近不太可靠，言语间带有侵犯性，说话语调倾向于防卫性、冷漠甚至带着些许刺人的刻薄。")
         elif defensiveness <= 10.0:
-            rel_texts.append(f"你对{partner}【完全卸下心防】。你在她面前感受到了绝对的安全感，不需要任何精神掩饰或言语伪装，这让你可以展露最本真的轻松。")
+            rel_texts.append(f"你对{partner}基本不设防。在她面前很放松，说话不用掂量措辞，想说什么说什么。这种安全感是安静的底色，不必挂在嘴上。")
             
         if rel_texts:
             feelings.append("长期人际关系气候：\n" + "\n".join(["  - " + t for t in rel_texts]))
